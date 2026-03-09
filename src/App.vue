@@ -1,6 +1,3 @@
-
-Copy
-
 <template>
   <div class="app">
     <canvas ref="starsCanvas" class="stars-canvas" />
@@ -195,9 +192,9 @@ const authLoading = ref(false)
 const authError  = ref('')
 const authForm   = ref({ email: '', password: '' })
 
-/// const isAuthenticated = computed(() => !!token.value) -- /// Войти на сайт с регой
+const isAuthenticated = computed(() => !!token.value)  
 
-const isAuthenticated = computed(() => true) /// Войти на основной сайт без реги
+// const isAuthenticated = computed(() => true) /// Войти на основной сайт без реги
 
 // --- App state ---
 const starsCanvas  = ref(null)
