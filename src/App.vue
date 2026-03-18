@@ -690,15 +690,15 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 
 /* SIDEBAR */
 .sidebar {
-  position: relative; 
-  z-index: 10; 
-  width: 280px; 
+  position: relative;
+  z-index: 10;
+  width: 280px;
   flex-shrink: 0;
-  background: rgba(11, 15, 26, 0.85); 
+  background: rgba(11, 15, 26, 0.85);
   border-right: 1px solid var(--border);
-  backdrop-filter: blur(12px); 
-  display: flex; 
-  flex-direction: column; 
+  backdrop-filter: blur(12px);
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
@@ -1414,15 +1414,6 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   .sidebar.open {
     left: 0;
   }
-}
-
-  .sidebar-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 40;
-    backdrop-filter: blur(2px);
-  }
 
   .burger-btn {
     display: flex;
@@ -1440,6 +1431,14 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
     color: var(--text);
     font-size: 18px;
     cursor: pointer;
+  }
+
+  .sidebar-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 40;
+    backdrop-filter: blur(2px);
   }
 
   .main {
@@ -1463,6 +1462,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
     flex-direction: column;
     gap: 12px;
   }
+}
 
 </style>
 
