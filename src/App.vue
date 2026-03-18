@@ -75,6 +75,7 @@
 
         <div class="sidebar-footer">
           <span class="user-email">{{ userEmail }}</span>
+          <button class="theme-btn" @click="toggleTheme">{{ isDark ? '☀️' : '🌙' }}</button>
           <button class="logout-btn" @click="logout">Выйти</button>
         </div>
       </aside>
@@ -289,13 +290,20 @@ const authMode    = ref('login')
 const authLoading = ref(false)
 const authError   = ref('')
 const error = ref('') 
+const isDark = ref(true)
 const authForm    = ref({ email: '', password: '' })
 
 
-const isAuthenticated = computed(() => !!token.value)  
+/// const isAuthenticated = computed(() => !!token.value)  
 
-// const isAuthenticated = computed(() => true) /// Войти на основной сайт без реги
+const isAuthenticated = computed(() => true) 
 
+function toggleTheme() {
+  isDark.value = !isDark.value
+  document.documentElement.classList.toggle('light', !isDark.value)
+  localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
+  drawStars()
+}
 
 // --- App state ---
 const starsCanvas  = ref(null)
@@ -315,6 +323,11 @@ const analyticsData    = ref(null)
 const analyticsLoading = ref(false)
 
 onMounted(() => {
+  const saved = localStorage.getItem('theme')
+  if (saved === 'light') {
+    isDark.value = false
+    document.documentElement.classList.add('light')
+  }
   drawStars()
   if (isAuthenticated.value) fetchLinks()
 })
@@ -327,14 +340,16 @@ function drawStars() {
     canvas.width  = window.innerWidth
     canvas.height = window.innerHeight
     ctx.clearRect(0, 0, canvas.width, canvas.height)
+    const isLight = document.documentElement.classList.contains('light')
+
     for (let i = 0; i < 600; i++) {
       const x = Math.random() * canvas.width
       const y = Math.random() * canvas.height
-      const r = Math.random() * 1.2
-      const alpha = Math.random() * 0.7 + 0.1
+      const r = isLight ? Math.random() * 2 + 0.5 : Math.random() * 2.2
+      const alpha = isLight ? Math.random() * 0.6 + 0.4 : Math.random() * 0.7 + 0.1
       ctx.beginPath()
       ctx.arc(x, y, r, 0, Math.PI * 2)
-      ctx.fillStyle = `rgba(200, 210, 255, ${alpha})`
+      ctx.fillStyle = `rgba(168, 85, 247, ${alpha})`    
       ctx.fill()
     }
   }
@@ -1315,7 +1330,64 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .slide-up-enter-from, .slide-up-leave-to { 
   opacity: 0; 
 
-  transform: translateY(12px); 
+  transform: translateY(12px);
 }
+
+/* LIGHT THEME */
+:root.light {
+  --bg:     #f0eeff;
+  --bg2:    #f9f7ff;
+  --bg3:    #ede9fe;
+  --border: rgba(109, 40, 217, 0.12);
+  --purple: #6d28d9;
+  --purple2:#7c3aed;
+  --glow:   rgba(109, 40, 217, 0.3);
+  --text:   #1e1b4b;
+  --muted:  #6b7280;
+}
+
+:root.light html,
+:root.light body { background: var(--bg); }
+
+
+
+:root.light .sidebar { background: rgba(240, 238, 255, 0.95); }
+
+:root.light .url-input {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(109, 40, 217, 0.25);
+}
+
+:root.light .link-detail { background: rgba(255, 255, 255, 0.85); }
+
+:root.light .modal,
+:root.light .auth-box {
+  background: #ffffff;
+  box-shadow: 0 20px 60px rgba(109, 40, 217, 0.1);
+}
+
+:root.light .modal-input { background: #f5f3ff; }
+
+:root.light .modal-overlay { background: rgba(180, 170, 255, 0.35); }
+
+:root.light .auth-overlay { background: rgba(220, 215, 255, 0.7); }
+
+:root.light .stat-val,
+:root.light .analytics-stat-val { color: #1e1b4b; }
+
+:root.light .logo-bold { color: #1e1b4b; }
+
+.theme-btn {
+  font-size: 14px;
+  padding: 4px 8px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  flex-shrink: 0;
+}
+
+.theme-btn:hover { border-color: var(--purple2); }
 </style>
 
