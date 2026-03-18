@@ -43,7 +43,7 @@
         {{ sidebarOpen ? '✕' : '☰' }}
       </button>
       <div v-if="sidebarOpen" class="sidebar-overlay" @click="sidebarOpen = false" />
-      
+
       <aside class="sidebar" :class="{ open: sidebarOpen }">
         <div class="sidebar-header">
           <span class="sidebar-title">История ссылок</span>
@@ -1403,17 +1403,18 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 
 @media (max-width: 768px) {
   .sidebar {
-    position: fixed;
-    left: -280px;
-    top: 0;
-    height: 100%;
+    position: fixed !important;
+    left: -280px !important;
+    top: 0 !important;
+    height: 100% !important;
     z-index: 50;
     transition: left 0.25s ease;
   }
 
   .sidebar.open {
-    left: 0;
+    left: 0 !important;
   }
+}
 
   .sidebar-overlay {
     position: fixed;
