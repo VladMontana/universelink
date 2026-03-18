@@ -1403,16 +1403,16 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 
 @media (max-width: 768px) {
   .sidebar {
-    position: fixed !important;
-    left: -280px !important;
-    top: 0 !important;
-    height: 100% !important;
+    position: fixed;
+    left: -280px;
+    top: 0;
+    height: 100%;
     z-index: 50;
     transition: left 0.25s ease;
   }
 
   .sidebar.open {
-    left: 0 !important;
+    left: 0;
   }
 }
 
