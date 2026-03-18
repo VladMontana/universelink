@@ -39,7 +39,7 @@
 
     <!-- ОСНОВНОЙ ИНТЕРФЕЙС -->
     <template v-if="isAuthenticated">
-      <button class="burger-btn" @click="sidebarOpen = !sidebarOpen">
+      <button class="burger-btn" @click="sidebarOpen">
         {{ sidebarOpen ? '✕' : '☰' }}
       </button>
       <div v-if="sidebarOpen" class="sidebar-overlay" @click="sidebarOpen = false" />
@@ -318,7 +318,7 @@ const inputUrl     = ref('')
 const showModal    = ref(false)
 const loading      = ref(false)
 const copied       = ref(false)
-const sedibarOpen = ref(false)
+const sidebarOpen = ref(false)
 
 const form = ref({ url: '', customCode: '', maxClicks: null, expiresAt: '' })
 
