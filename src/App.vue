@@ -1,89 +1,57 @@
 <template>
-  <div class="app">
+  <div
+    ref="appRoot"
+    class="app"
+    :class="{
+      'sidebar-active': isMobileViewport && sidebarOpen,
+      'mobile-overlay-active': isMobileViewport && (sidebarOpen || showModal || showEdit || showAnalytics)
+    }"
+  >
     <canvas ref="starsCanvas" class="stars-canvas" />
-    
-    <!-- ЭКРАН АВТОРИЗАЦИИ -->
+
     <transition name="fade">
-      <div v-if="!isAuthenticated" class="auth-overlay">
-        <div class="auth-box">
-          <h1 class="logo" style="text-align:center; margin-bottom: 8px; font-size: clamp(28px, 8vw, 40px);">
-            <span class="logo-light">Universe</span><span class="logo-bold">Link</span>
-          </h1>
-          <p class="tagline" style="text-align:center; margin-bottom: 28px;">
-            {{ authMode === 'login' ? 'Войдите в аккаунт' : 'Создайте аккаунт' }}
-          </p>
-
-          <div class="modal-field">
-            <label>Email</label>
-            <input v-model="authForm.email" class="modal-input" type="email" placeholder="you@example.com" />
-          </div>
-
-          <div class="modal-field" style="margin-top: 14px;">
-            <label>Пароль</label>
-            <input v-model="authForm.password" class="modal-input" type="password" placeholder="••••••••" />
-          </div>
-
-          <p v-if="authError" class="auth-error">{{ authError }}</p>
-
-          <button class="btn-create" style="width:100%; margin-top: 20px;" :disabled="authLoading" @click="submitAuth">
-            {{ authLoading ? 'Подождите…' : (authMode === 'login' ? 'Войти' : 'Зарегистрироваться') }}
-          </button>
-
-          <p class="auth-switch">
-            {{ authMode === 'login' ? 'Нет аккаунта?' : 'Уже есть аккаунт?' }}
-            <span @click="toggleAuthMode">{{ authMode === 'login' ? 'Зарегистрироваться' : 'Войти' }}</span>
-          </p>
-        </div>
-      </div>
+      <AuthOverlay
+        v-if="!isAuthenticated"
+        :auth-mode="authMode"
+        :auth-loading="authLoading"
+        :auth-error="authError"
+        :email="authForm.email"
+        :password="authForm.password"
+        :email-error="authFieldErrors.email"
+        :password-error="authFieldErrors.password"
+        @update:email="updateAuthEmail"
+        @update:password="updateAuthPassword"
+        @toggle-mode="toggleAuthMode"
+        @submit="submitAuth"
+      />
     </transition>
 
-    <!-- ОСНОВНОЙ ИНТЕРФЕЙС -->
     <template v-if="isAuthenticated">
-      <button class="burger-btn" @click="sidebarOpen">
-        {{ sidebarOpen ? '✕' : '☰' }}
+      <button
+        class="burger-btn"
+        :class="{ open: sidebarOpen }"
+        :aria-label="sidebarOpen ? 'Закрыть меню' : 'Открыть меню'"
+        @click="sidebarOpen = !sidebarOpen"
+      >
+        <X v-if="sidebarOpen" :size="18" aria-hidden="true" />
+        <Menu v-else :size="18" aria-hidden="true" />
       </button>
       <div v-if="sidebarOpen" class="sidebar-overlay" @click="sidebarOpen = false" />
 
-      <aside class="sidebar" :class="{ open: sidebarOpen }">
-        <div class="sidebar-header">
-          <span class="sidebar-title">История ссылок</span>
-          <span class="sidebar-count">{{ links.length }}</span>
-        </div>
-
-        <div class="sidebar-list">
-          <div v-if="links.length === 0" class="sidebar-empty">Пока нет ссылок</div>
-
-          <div
-            v-for="link in links"
-            :key="link.id"
-            class="sidebar-item"
-            :class="{ active: selectedLink?.id === link.id }"
-            @click="selectLink(link)"
-          >
-            <div class="sidebar-item-top">
-              <span class="sidebar-short">{{ BASE_URL }}/{{ link.short_code }}</span>
-              <span class="sidebar-date">{{ formatDate(link.created_at) }}</span>
-            </div>
-            <div class="sidebar-item-bottom">
-              <span class="sidebar-original">{{ truncate(link.original_url) }}</span>
-              <div class="sidebar-badges">
-                <span v-if="link.max_clicks" class="badge badge-click">
-                  {{ link.click_count }}/{{ link.max_clicks }}
-                </span>
-                <span v-if="link.expires_at" class="badge badge-time">
-                  {{ formatExpiry(link.expires_at) }}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="sidebar-footer">
-          <span class="user-email">{{ userEmail }}</span>
-          <button class="theme-btn" @click="toggleTheme">{{ isDark ? '☀️' : '🌙' }}</button>
-          <button class="logout-btn" @click="logout">Выйти</button>
-        </div>
-      </aside>
+      <SidebarPanel
+        :links="links"
+        :selected-link-id="selectedLink?.id ?? null"
+        :base-url="BASE_URL"
+        :user-email="userEmail"
+        :is-dark="isDark"
+        :sidebar-open="sidebarOpen"
+        :format-date="formatDate"
+        :format-expiry="formatExpiry"
+        :truncate="truncate"
+        @select-link="selectLink"
+        @toggle-theme="toggleTheme"
+        @logout="logout"
+      />
 
       <main class="main">
         <div class="logo-wrapper">
@@ -93,533 +61,268 @@
           <p class="tagline">Вся вселенная в одной ссылке.</p>
         </div>
 
-        <div class="input-wrapper">
+        <div ref="inputWrapper" class="input-wrapper">
           <div class="glow-ring" />
           <input
             v-model="inputUrl"
             class="url-input"
+            aria-label="Длинная ссылка"
             placeholder="Вставь длинную ссылку…"
             @keydown.enter="openModal"
           />
-          <button class="shrink-btn" @click="openModal">
+          <button class="shrink-btn" aria-label="Открыть форму сокращения" @click="openModal">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <path d="M5 12h14M12 5l7 7-7 7"/>
+              <path d="M5 12h14M12 5l7 7-7 7" />
             </svg>
           </button>
         </div>
 
-        <transition name="slide-up">
-          <div v-if="selectedLink" class="link-detail">
-            <div class="detail-top">
-              <span class="detail-short">{{ BASE_URL }}/{{ selectedLink.short_code }}</span>
-              <button class="close-btn" style="margin-left: auto; display: block;" @click="selectedLink = null">✕</button>
-            </div>
-            <div class="detail-actions">
-              <button class="copy-btn" @click="copyLink(selectedLink.short_code)">
-                {{ copied ? 'Скопировано!' : 'Копировать' }}
-              </button>
-              <button class="analytics-btn" @click="openAnalytics(selectedLink)">
-                📊 Аналитика
-              </button>
-              <button class="edit-btn" @click="openEdit(selectedLink)">
-                ✏️ Изменить
-              </button>
-              <button class="delete-btn" @click="deleteLink(selectedLink)">
-                🗑
-              </button>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">Оригинал</span>
-              <a :href="selectedLink.original_url" target="_blank" class="detail-url">
-                {{ selectedLink.original_url }}
-              </a>
-            </div>
-            <div class="detail-stats">
-              <div class="stat">
-                <span class="stat-val">{{ selectedLink.click_count }}</span>
-                <span class="stat-label">переходов</span>
-              </div>
-              <div v-if="selectedLink.max_clicks" class="stat">
-                <span class="stat-val">{{ selectedLink.max_clicks }}</span>
-                <span class="stat-label">лимит</span>
-              </div>
-              <div v-if="selectedLink.expires_at" class="stat">
-                <span class="stat-val">{{ formatExpiry(selectedLink.expires_at) }}</span>
-                <span class="stat-label">истекает</span>
-              </div>
-            </div>
-          </div>
+        <transition name="slide-up" mode="out-in">
+          <LinkDetailCard
+            v-if="selectedLink"
+            :link="selectedLink"
+            :base-url="BASE_URL"
+            :copied="copied"
+            :format-expiry="formatExpiry"
+            @close="selectedLink = null"
+            @copy="copyLink"
+            @open-analytics="openAnalytics"
+            @open-edit="openEdit"
+            @delete-link="deleteLink"
+          />
         </transition>
       </main>
     </template>
 
-    <!-- МОДАЛКА СОЗДАНИЯ ССЫЛКИ -->
     <transition name="fade">
-      <div v-if="showModal" class="modal-overlay" @click.self="showModal = false">
-        <div class="modal">
-          <h2 class="modal-title">Новая ссылка</h2>
-
-          <div class="modal-field">
-            <label>URL</label>
-            <input v-model="form.url" class="modal-input" placeholder="https://..." />
-          </div>
-
-          <div class="modal-field">
-            <label>Свой код <span class="optional">необязательно</span></label>
-            <input v-model="form.customCode" class="modal-input" placeholder="my-link" maxlength="20" />
-            <span v-if="error" class="error-msg">{{ error }}</span>
-          </div>
-
-          <div class="modal-row">
-            <div class="modal-field">
-              <label>Лимит переходов</label>
-              <input v-model.number="form.maxClicks" class="modal-input" type="number" min="1" placeholder="∞" />
-            </div>
-            <div class="modal-field">
-              <label>Истекает</label>
-              <input v-model="form.expiresAt" class="modal-input" type="datetime-local" />
-            </div>
-          </div>
-
-          <div class="modal-actions">
-            <button class="btn-cancel" @click="showModal = false">Отмена</button>
-            <button class="btn-create" :disabled="loading" @click="createLink">
-              {{ loading ? 'Создаём…' : 'Сократить' }}
-            </button>
-          </div>
-        </div>
-      </div>
+      <CreateLinkModal
+        v-if="showModal"
+        :form="form"
+        :error="error"
+        :loading="loading"
+        @close="closeCreateModal"
+        @submit="createLink"
+      />
     </transition>
 
-    <!-- МОДАЛКА РЕДАКТИРОВАНИЯ -->
     <transition name="fade">
-      <div v-if="showEdit" class="modal-overlay" @click.self="showEdit = false">
-        <div class="modal">
-          <h2 class="modal-title">Редактировать ссылку</h2>
-
-          <div class="modal-field">
-            <label>Свой код</label>
-            <input v-model="editForm.custom_code" class="modal-input" placeholder="my-link" maxlength="20" />
-          </div>
-
-          <div class="modal-row">
-            <div class="modal-field">
-              <label>Лимит переходов</label>
-              <input v-model.number="editForm.max_clicks" class="modal-input" type="number" min="1" placeholder="∞" />
-            </div>
-            <div class="modal-field">
-              <label>Истекает</label>
-              <input v-model="editForm.expires_at" class="modal-input" type="datetime-local" />
-            </div>
-          </div>
-
-          <div class="modal-actions">
-            <button class="btn-cancel" @click="showEdit = false">Отмена</button>
-            <button class="btn-create" :disabled="editLoading" @click="submitEdit">
-              {{ editLoading ? 'Сохраняем…' : 'Сохранить' }}
-            </button>
-          </div>
-        </div>
-      </div>
+      <EditLinkModal
+        v-if="showEdit"
+        :edit-form="editForm"
+        :edit-loading="editLoading"
+        @close="closeEditModal"
+        @submit="submitEdit"
+      />
     </transition>
 
-    <!-- МОДАЛКА АНАЛИТИКИ -->
     <transition name="fade">
-      <div v-if="showAnalytics" class="modal-overlay" @click.self="closeAnalytics">
-        <div class="modal analytics-modal">
-          <div class="analytics-header">
-            <div>
-              <h2 class="modal-title">Аналитика</h2>
-              <span class="analytics-code">{{ BASE_URL }}/{{ analyticsLink?.short_code }}</span>
-            </div>
-            <button class="close-btn" @click="closeAnalytics">✕</button>
-          </div>
-
-          <div v-if="analyticsLoading" class="analytics-loading">Загружаем данные…</div>
-
-          <template v-else-if="analyticsData">
-            <div class="analytics-stats">
-              <div class="analytics-stat">
-                <span class="analytics-stat-val">{{ analyticsData.total_clicks }}</span>
-                <span class="analytics-stat-label">Всего переходов</span>
-              </div>
-              <div v-if="analyticsLink?.max_clicks" class="analytics-stat">
-                <span class="analytics-stat-val">{{ analyticsLink.max_clicks - analyticsData.total_clicks }}</span>
-                <span class="analytics-stat-label">Осталось</span>
-              </div>
-              <div v-if="analyticsLink?.expires_at" class="analytics-stat">
-                <span class="analytics-stat-val">{{ formatExpiry(analyticsLink.expires_at) }}</span>
-                <span class="analytics-stat-label">Истекает</span>
-              </div>
-            </div>
-
-            <div class="analytics-clicks-header">
-              <span>Последние переходы</span>
-              <span class="analytics-clicks-count">{{ analyticsData.clicks.length }}</span>
-            </div>
-
-            <div class="analytics-clicks-list">
-              <div v-if="analyticsData.clicks.length === 0" class="analytics-empty">
-                Переходов пока нет
-              </div>
-              <div
-                v-for="(click, i) in analyticsData.clicks"
-                :key="i"
-                class="analytics-click-item"
-              >
-                <div class="click-icon">→</div>
-                <div class="click-info">
-                  <span class="click-agent">{{ truncateAgent(click.user_agent) }}</span>
-                  <span class="click-ip">{{ click.ip_address || 'неизвестно' }}</span>
-                </div>
-                <span class="click-time">{{ formatClickTime(click.clicked_at) }}</span>
-              </div>
-            </div>
-          </template>
-        </div>
-      </div>
+      <AnalyticsModal
+        v-if="showAnalytics"
+        :base-url="BASE_URL"
+        :analytics-link="analyticsLink"
+        :analytics-data="analyticsData"
+        :analytics-loading="analyticsLoading"
+        :format-expiry="formatExpiry"
+        :truncate-agent="truncateAgent"
+        :format-click-time="formatClickTime"
+        @close="closeAnalytics"
+      />
     </transition>
+
+    <Toaster rich-colors position="top-right" />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
+import { Menu, X } from 'lucide-vue-next'
+import { Toaster } from 'vue-sonner'
+import AuthOverlay from './components/AuthOverlay.vue'
+import LinkDetailCard from './components/LinkDetailCard.vue'
+import SidebarPanel from './components/SidebarPanel.vue'
+import { useAnalytics } from './composables/useAnalytics'
+import { useAuth } from './composables/useAuth'
+import { useLinks } from './composables/useLinks'
+import { useStarsCanvas } from './composables/useStarsCanvas'
+import { useTheme } from './composables/useTheme'
+import { useViewport } from './composables/useViewport'
+import {
+  formatClickTime,
+  formatDate,
+  formatExpiry,
+  truncate,
+  truncateAgent,
+} from './utils/formatters'
 
-const BASE_URL = 'http://localhost:8000'
-const API = BASE_URL
+const CreateLinkModal = defineAsyncComponent(() => import('./components/CreateLinkModal.vue'))
+const EditLinkModal = defineAsyncComponent(() => import('./components/EditLinkModal.vue'))
+const AnalyticsModal = defineAsyncComponent(() => import('./components/AnalyticsModal.vue'))
 
-// --- Auth state ---
-const token       = ref(localStorage.getItem('token') || '')
-const userEmail   = ref(localStorage.getItem('userEmail') || '')
-const authMode    = ref('login')
-const authLoading = ref(false)
-const authError   = ref('')
-const error = ref('') 
-const isDark = ref(true)
-const authForm    = ref({ email: '', password: '' })
+const API = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '')
+const BASE_URL = (import.meta.env.VITE_BASE_URL || API).replace(/\/$/, '')
 
-
-/// const isAuthenticated = computed(() => !!token.value)  
-
-const isAuthenticated = computed(() => true) 
-
-function toggleTheme() {
-  isDark.value = !isDark.value
-  document.documentElement.classList.toggle('light', !isDark.value)
-  localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
-  drawStars()
-}
-
-// --- App state ---
-const starsCanvas  = ref(null)
-const links        = ref([])
-const selectedLink = ref(null)
-const inputUrl     = ref('')
-const showModal    = ref(false)
-const loading      = ref(false)
-const copied       = ref(false)
 const sidebarOpen = ref(false)
+const appRoot = ref(null)
+const inputWrapper = ref(null)
+const { starsCanvas, drawStars } = useStarsCanvas()
+const { isDark, toggleTheme } = useTheme(drawStars)
+const { isMobileViewport } = useViewport(sidebarOpen)
 
-const form = ref({ url: '', customCode: '', maxClicks: null, expiresAt: '' })
+let fetchLinks = async () => {}
 
-// --- Analytics state ---
-const showAnalytics    = ref(false)
-const analyticsLink    = ref(null)
-const analyticsData    = ref(null)
-const analyticsLoading = ref(false)
+const {
+  token,
+  userEmail,
+  authMode,
+  authLoading,
+  authError,
+  authForm,
+  authFieldErrors,
+  isAuthenticated,
+  toggleAuthMode,
+  updateAuthEmail,
+  updateAuthPassword,
+  submitAuth,
+  logout,
+} = useAuth({
+  apiUrl: API,
+  onAuthenticated: () => fetchLinks(),
+  onLogout: handleLogoutCleanup,
+})
+
+const {
+  showAnalytics,
+  analyticsLink,
+  analyticsData,
+  analyticsLoading,
+  openAnalytics,
+  closeAnalytics,
+  clearAnalyticsCache,
+  removeCachedLinkStats,
+} = useAnalytics({
+  apiUrl: API,
+  token,
+  onUnauthorized: () => logout(),
+})
+
+const {
+  links,
+  selectedLink,
+  inputUrl,
+  showModal,
+  loading,
+  copied,
+  error,
+  form,
+  showEdit,
+  editLoading,
+  editForm,
+  fetchLinks: fetchLinksFromApi,
+  createLink,
+  closeCreateModal,
+  closeEditModal,
+  openModal: openCreateModal,
+  selectLink: selectLinkFromList,
+  openEdit,
+  submitEdit: submitEditLink,
+  deleteLink: deleteLinkByCode,
+  copyLink,
+  clearLinksState,
+} = useLinks({
+  apiUrl: API,
+  baseUrl: BASE_URL,
+  token,
+  onUnauthorized: () => logout(),
+})
+
+fetchLinks = fetchLinksFromApi
 
 onMounted(() => {
-  const saved = localStorage.getItem('theme')
-  if (saved === 'light') {
-    isDark.value = false
-    document.documentElement.classList.add('light')
-  }
-  drawStars()
   if (isAuthenticated.value) fetchLinks()
 })
 
-// --- Stars ---
-function drawStars() {
-  const canvas = starsCanvas.value
-  const ctx = canvas.getContext('2d')
-  const resize = () => {
-    canvas.width  = window.innerWidth
-    canvas.height = window.innerHeight
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-    const isLight = document.documentElement.classList.contains('light')
+function handleLogoutCleanup() {
+  clearLinksState()
+  clearAnalyticsCache()
+  sidebarOpen.value = false
+}
 
-    for (let i = 0; i < 600; i++) {
-      const x = Math.random() * canvas.width
-      const y = Math.random() * canvas.height
-      const r = isLight ? Math.random() * 2 + 0.5 : Math.random() * 2.2
-      const alpha = isLight ? Math.random() * 0.6 + 0.4 : Math.random() * 0.7 + 0.1
-      ctx.beginPath()
-      ctx.arc(x, y, r, 0, Math.PI * 2)
-      ctx.fillStyle = `rgba(168, 85, 247, ${alpha})`    
-      ctx.fill()
-    }
+watch([showModal, showEdit, showAnalytics], ([createOpen, editOpen, analyticsOpen]) => {
+  if (createOpen || editOpen || analyticsOpen) {
+    sidebarOpen.value = false
   }
-  resize()
-  window.addEventListener('resize', resize)
-}
+})
 
-// --- Auth ---
-function toggleAuthMode() {
-  authMode.value = authMode.value === 'login' ? 'register' : 'login'
-  authError.value = ''
-}
+watch(selectedLink, (nextLink, prevLink) => {
+  if (!prevLink || nextLink) return
+  if (showModal.value || showEdit.value || showAnalytics.value) return
+  restoreMainViewport()
+})
 
-async function submitAuth() {
-  authError.value = ''
-  authLoading.value = true
-  try {
-    if (authMode.value === 'register') {
-      const res = await fetch(`${API}/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: authForm.value.email, password: authForm.value.password }),
-      })
-      if (!res.ok) {
-        const err = await res.json()
-        authError.value = err.detail?.[0]?.msg || err.detail || 'Ошибка регистрации'
-        return
+function restoreMainViewport() {
+  const active = document.activeElement
+  if (active instanceof HTMLElement) active.blur()
+
+  if (appRoot.value instanceof HTMLElement) {
+    appRoot.value.scrollTop = 0
+    appRoot.value.scrollLeft = 0
+  }
+
+  if (document.scrollingElement) {
+    document.scrollingElement.scrollTop = 0
+    document.scrollingElement.scrollLeft = 0
+  }
+
+  window.scrollTo(0, 0)
+
+  requestAnimationFrame(() => {
+    if (appRoot.value instanceof HTMLElement) {
+      appRoot.value.scrollTop = 0
+      appRoot.value.scrollLeft = 0
+    }
+    if (document.scrollingElement) {
+      document.scrollingElement.scrollTop = 0
+      document.scrollingElement.scrollLeft = 0
+    }
+    window.scrollTo(0, 0)
+
+    nextTick(() => {
+      if (inputWrapper.value instanceof HTMLElement) {
+        inputWrapper.value.scrollIntoView({
+          block: 'center',
+          inline: 'nearest',
+          behavior: 'auto',
+        })
       }
-      authMode.value = 'login'
-    }
-
-    const res = await fetch(`${API}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: authForm.value.email, password: authForm.value.password }),
     })
-
-    if (!res.ok) {
-      const err = await res.json()
-      authError.value = err.detail || 'Неверный email или пароль'
-      return
-    }
-
-    const data = await res.json()
-    token.value = data.access_token
-    localStorage.setItem('token', data.access_token)
-    localStorage.setItem('userEmail', authForm.value.email)
-    userEmail.value = authForm.value.email
-    authForm.value = { email: '', password: '' }
-    await fetchLinks()
-  } catch {
-    authError.value = 'Ошибка соединения с сервером'
-  } finally {
-    authLoading.value = false
-  }
-}
-
-function logout() {
-  token.value = ''
-  userEmail.value = ''
-  links.value = []
-  selectedLink.value = null
-  localStorage.removeItem('token')
-  localStorage.removeItem('userEmail')
-}
-
-// --- API ---
-async function fetchLinks() {
-  try {
-    const res = await fetch(`${API}/links`, {
-      headers: { Authorization: `Bearer ${token.value}` }
-    })
-    if (res.status === 401) { logout(); return }
-    if (res.ok) links.value = await res.json()
-  } catch (e) {
-    console.error(e)
-  }
-}
-
-async function createLink() {
-  if (!form.value.url) return
-  loading.value = true
-  error.value = ''
-
-  try {
-    const body = {
-      original_url: form.value.url,
-      ...(form.value.customCode && { custom_code: form.value.customCode }),
-      ...(form.value.maxClicks  && { max_clicks: form.value.maxClicks }),
-      ...(form.value.expiresAt  && { expires_at: new Date(form.value.expiresAt).toISOString() }),
-    }
-
-    const res = await fetch(`${API}/links`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token.value}`,
-      },
-      body: JSON.stringify(body),
-    })
-
-    if (res.status === 401) { logout(); return }
-    
-    if (!res.ok) {
-      const data = await res.json()
-      error.value = data.detail
-      return
-    }
-
-    if (res.ok) {
-      const newLink = await res.json()
-      links.value.unshift(newLink)
-      selectedLink.value = newLink
-      showModal.value = false
-      resetForm()
-    }
-  } finally {
-    loading.value = false
-  }
-}
-
-// --- Analytics ---
-async function openAnalytics(link) {
-  analyticsLink.value = link
-  analyticsData.value = null
-  analyticsLoading.value = true
-  showAnalytics.value = true
-
-  try {
-    const res = await fetch(`${API}/links/${link.short_code}/stats`, {
-      headers: { Authorization: `Bearer ${token.value}` }
-    })
-    if (res.ok) analyticsData.value = await res.json()
-  } catch (e) {
-    console.error(e)
-  } finally {
-    analyticsLoading.value = false
-  }
-}
-
-function closeAnalytics() {
-  showAnalytics.value = false
-  analyticsData.value = null
-  analyticsLink.value = null
-}
-
-// --- Edit ---
-const showEdit   = ref(false)
-const editLoading = ref(false)
-const editLink   = ref(null)
-const editForm   = ref({ custom_code: '', max_clicks: null, expires_at: '' })
-
-function openEdit(link) {
-  editLink.value = link
-  editForm.value = {
-    custom_code: link.short_code,
-    max_clicks: link.max_clicks || null,
-    expires_at: link.expires_at ? new Date(link.expires_at).toISOString().slice(0, 16) : '',
-  }
-  showEdit.value = true
+  })
 }
 
 async function submitEdit() {
-  editLoading.value = true
-  try {
-    const body = {}
-    if (editForm.value.custom_code)  body.custom_code = editForm.value.custom_code
-    if (editForm.value.max_clicks)   body.max_clicks  = editForm.value.max_clicks
-    if (editForm.value.expires_at)   body.expires_at  = new Date(editForm.value.expires_at).toISOString()
-
-    const res = await fetch(`${API}/links/${editLink.value.short_code}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token.value}`,
-      },
-      body: JSON.stringify(body),
-    })
-
-    if (res.ok) {
-      await fetchLinks()
-      showEdit.value = false
-      selectedLink.value = null
-    }
-  } finally {
-    editLoading.value = false
-  }
+  const updated = await submitEditLink()
+  if (!updated) return
+  clearAnalyticsCache()
+  restoreMainViewport()
 }
 
-// --- Delete ---
 async function deleteLink(link) {
-  if (!confirm(`Удалить ссылку ${link.short_code}?`)) return
-
-  const res = await fetch(`${API}/links/${link.short_code}`, {
-    method: 'DELETE',
-    headers: { Authorization: `Bearer ${token.value}` },
-  })
-
-  if (res.ok || res.status === 204) {
-    links.value = links.value.filter(l => l.id !== link.id)
-    selectedLink.value = null
-  }
+  const deleted = await deleteLinkByCode(link)
+  if (!deleted) return
+  removeCachedLinkStats(link.short_code)
 }
 
-// --- Helpers ---
 function openModal() {
-  form.value.url = inputUrl.value
-  showModal.value = true
+  openCreateModal()
+  if (isMobileViewport.value) sidebarOpen.value = false
 }
 
 function selectLink(link) {
-  selectedLink.value = selectedLink.value?.id === link.id ? null : link
-}
-
-async function copyLink(code) {
-  await navigator.clipboard.writeText(`${BASE_URL}/${code}`)
-  copied.value = true
-  setTimeout(() => copied.value = false, 2000)
-}
-
-function resetForm() {
-  form.value = { url: '', customCode: '', maxClicks: null, expiresAt: '' }
-  inputUrl.value = ''
-  error.value = ''
-}
-
-function truncate(str, n = 38) {
-  return str.length > n ? str.slice(0, n) + '…' : str
-}
-
-function truncateAgent(agent) {
-  if (!agent) return 'Неизвестный браузер'
-  if (agent.includes('Chrome')) return 'Chrome'
-  if (agent.includes('Firefox')) return 'Firefox'
-  if (agent.includes('Safari')) return 'Safari'
-  if (agent.includes('Edge')) return 'Edge'
-  return agent.slice(0, 30) + '…'
-}
-
-function formatDate(iso) {
-  return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' })
-}
-
-function formatExpiry(iso) {
-  const d = new Date(iso)
-  const now = new Date()
-  const diff = d - now
-  if (diff < 0) return 'истекла'
-  const days = Math.floor(diff / 86400000)
-  if (days > 0) return `${days}д`
-  const hours = Math.floor(diff / 3600000)
-  return `${hours}ч`
-}
-
-function formatClickTime(iso) {
-  return new Date(iso).toLocaleString('ru-RU', {
-    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
-  })
+  selectLinkFromList(link)
+  if (isMobileViewport.value) sidebarOpen.value = false
 }
 </script>
 
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
-
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
@@ -641,6 +344,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .app { 
   display: flex; 
   height: 100vh; 
+  min-height: 100dvh;
   position: relative; 
   overflow: hidden; 
 }
@@ -668,10 +372,23 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 }
 
 .auth-error { 
-  margin-top: 10px; 
-  font-size: 12px; 
-  color: #f87171; 
-  font-family: var(--mono); 
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  background: rgba(248, 113, 113, 0.1);
+  font-size: 12px;
+  color: #fecaca;
+  font-family: var(--mono);
+  line-height: 1.45;
+}
+
+.field-error {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #fda4af;
+  font-family: var(--mono);
+  line-height: 1.4;
 }
 
 .auth-switch { 
@@ -866,7 +583,8 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   flex-direction: column; 
   align-items: center; 
   justify-content: center; 
-  padding: 40px; gap: 32px; 
+  padding: 40px;
+  gap: 32px;
 }
 
 .logo-wrapper { text-align: center; }
@@ -944,9 +662,56 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 
 .link-detail { 
   width: 100%; max-width: 620px; 
-  background: rgba(15, 21, 37, 0.9); 
-  border: 1px solid var(--border); border-radius: 16px; 
-  padding: 20px 24px; backdrop-filter: blur(12px); 
+  background:
+    linear-gradient(rgba(15, 21, 37, 0.9), rgba(15, 21, 37, 0.9)) padding-box,
+    linear-gradient(120deg, rgba(124, 58, 237, 0.72), rgba(168, 85, 247, 0.9), rgba(236, 72, 153, 0.72), rgba(124, 58, 237, 0.72)) border-box;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  padding: 20px 24px; backdrop-filter: blur(12px);
+  position: relative;
+  isolation: isolate;
+  background-size: 100% 100%, 240% 240%;
+  background-position: center, 0% 50%;
+  animation: detailBorderPulse 2.8s ease-in-out infinite, detailBorderShift 9s linear infinite;
+  transition: box-shadow 0.2s;
+  box-shadow:
+    0 0 0 1px rgba(124, 58, 237, 0.28),
+    0 0 18px rgba(124, 58, 237, 0.3),
+    0 0 34px rgba(168, 85, 247, 0.18);
+}
+
+.link-detail:hover {
+  box-shadow:
+    0 0 0 1px rgba(168, 85, 247, 0.45),
+    0 0 24px rgba(168, 85, 247, 0.4),
+    0 0 40px rgba(236, 72, 153, 0.2);
+}
+
+@keyframes detailBorderPulse {
+  0% {
+    box-shadow:
+      0 0 0 1px rgba(124, 58, 237, 0.24),
+      0 0 12px rgba(124, 58, 237, 0.2),
+      0 0 22px rgba(168, 85, 247, 0.12);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(168, 85, 247, 0.42),
+      0 0 24px rgba(168, 85, 247, 0.36),
+      0 0 44px rgba(236, 72, 153, 0.18);
+  }
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(124, 58, 237, 0.24),
+      0 0 12px rgba(124, 58, 237, 0.2),
+      0 0 22px rgba(168, 85, 247, 0.12);
+  }
+}
+
+@keyframes detailBorderShift {
+  0% { background-position: center, 0% 50%; }
+  50% { background-position: center, 100% 50%; }
+  100% { background-position: center, 0% 50%; }
 }
 
 .detail-top { 
@@ -976,7 +741,10 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   font-size: 12px; padding: 5px 12px; 
   background: rgba(124,58,237,0.2); border: 1px solid rgba(124,58,237,0.3); 
   border-radius: 8px; color: var(--purple2); cursor: pointer; transition: background 0.15s; 
-  font-family: var(--font); white-space: nowrap; 
+  font-family: var(--font); white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .copy-btn:hover { background: rgba(124,58,237,0.35); }
@@ -985,7 +753,10 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   font-size: 12px; padding: 5px 12px; 
   background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.25); 
   border-radius: 8px; color: #34d399; cursor: pointer; transition: background 0.15s; 
-  font-family: var(--font); white-space: nowrap; 
+  font-family: var(--font); white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .analytics-btn:hover { background: rgba(16,185,129,0.2); }
@@ -994,7 +765,10 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   font-size: 12px; padding: 5px 12px; 
   background: rgba(251,191,36,0.1); border: 1px solid rgba(251,191,36,0.25); 
   border-radius: 8px; color: #fbbf24; cursor: pointer; 
-  transition: background 0.15s; font-family: var(--font); white-space: nowrap; 
+  transition: background 0.15s; font-family: var(--font); white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .edit-btn:hover { background: rgba(251,191,36,0.2); }
@@ -1004,7 +778,10 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   background: rgba(248,113,113,0.1); 
   border: 1px solid rgba(248,113,113,0.25); 
   border-radius: 8px; color: #f87171; cursor: pointer; 
-  transition: background 0.15s; 
+   transition: background 0.15s;
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
 }
 
 .delete-btn:hover { background: rgba(248,113,113,0.2); }
@@ -1130,6 +907,10 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 }
 
 .modal-input:focus { border-color: rgba(124,58,237,0.5); }
+.modal-input.invalid {
+  border-color: rgba(248, 113, 113, 0.65);
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.16);
+}
 .modal-input::-webkit-calendar-picker-indicator { filter: invert(0.5); }
 .modal-row { 
   display: flex; 
@@ -1256,6 +1037,35 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   letter-spacing: 0.1em; 
 }
 
+.analytics-visuals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px 18px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.chart-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(15, 21, 37, 0.45);
+  padding: 12px;
+}
+
+.chart-card-title {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-family: var(--mono);
+  margin-bottom: 8px;
+}
+
+.analytics-chart {
+  width: 100%;
+  height: 170px;
+}
+
 .analytics-clicks-count { 
   background: var(--bg3); 
   border-radius: 20px; 
@@ -1269,6 +1079,26 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   scrollbar-width: thin; 
   scrollbar-color: var(--bg3) transparent; 
   padding: 0 16px 16px; 
+}
+
+.analytics-more-btn {
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg3);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.analytics-more-btn:hover {
+  border-color: rgba(124, 58, 237, 0.35);
+  color: var(--text);
 }
 
 .analytics-empty { 
@@ -1364,7 +1194,14 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   border-color: rgba(109, 40, 217, 0.25);
 }
 
-:root.light .link-detail { background: rgba(255, 255, 255, 0.85); }
+:root.light .link-detail {
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.88)) padding-box,
+    linear-gradient(135deg, rgba(109, 40, 217, 0.38), rgba(124, 58, 237, 0.45), rgba(236, 72, 153, 0.28)) border-box;
+  box-shadow:
+    0 0 0 1px rgba(109, 40, 217, 0.2),
+    0 0 16px rgba(109, 40, 217, 0.15);
+}
 
 :root.light .modal,
 :root.light .auth-box {
@@ -1372,16 +1209,40 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   box-shadow: 0 20px 60px rgba(109, 40, 217, 0.1);
 }
 
+:root.light .chart-card {
+  background: rgba(255, 255, 255, 0.7);
+}
+
 :root.light .modal-input { background: #f5f3ff; }
+
+:root.light .modal-input.invalid {
+  border-color: rgba(220, 38, 38, 0.45);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
 
 :root.light .modal-overlay { background: rgba(180, 170, 255, 0.35); }
 
 :root.light .auth-overlay { background: rgba(220, 215, 255, 0.7); }
 
+:root.light .auth-error {
+  color: #991b1b;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+:root.light .field-error {
+  color: #b91c1c;
+}
+
 :root.light .stat-val,
 :root.light .analytics-stat-val { color: #1e1b4b; }
 
 :root.light .logo-bold { color: #1e1b4b; }
+
+:root.light .burger-btn {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(109, 40, 217, 0.2);
+  color: #1e1b4b;
+}
 
 .theme-btn {
   font-size: 14px;
@@ -1392,6 +1253,9 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   cursor: pointer;
   transition: border-color 0.15s;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .theme-btn:hover { border-color: var(--purple2); }
@@ -1402,35 +1266,69 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 }
 
 @media (max-width: 768px) {
+  html,
+  body {
+    height: auto;
+    min-height: 100%;
+    overflow-y: auto;
+  }
+
+  .app {
+    height: auto;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .app.sidebar-active {
+    overflow-y: hidden;
+  }
+
+  .app.mobile-overlay-active {
+    overflow-y: hidden;
+  }
+
+  .app.mobile-overlay-active .main {
+    display: none;
+  }
+
   .sidebar {
     position: fixed;
-    left: -280px;
+    left: 0;
     top: 0;
-    height: 100%;
+    width: min(84vw, 320px);
+    height: 100dvh;
     z-index: 50;
-    transition: left 0.25s ease;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
   }
 
   .sidebar.open {
-    left: 0;
+    transform: translateX(0);
   }
 
   .burger-btn {
     display: flex;
     position: fixed;
-    top: 16px;
-    left: 16px;
+    top: max(14px, env(safe-area-inset-top));
+    left: 14px;
     z-index: 60;
-    width: 38px;
-    height: 38px;
+    width: 40px;
+    height: 40px;
     align-items: center;
     justify-content: center;
-    background: var(--bg2);
+    background: rgba(15, 21, 37, 0.9);
     border: 1px solid var(--border);
     border-radius: 10px;
     color: var(--text);
     font-size: 18px;
     cursor: pointer;
+    backdrop-filter: blur(6px);
+    transition: left 0.25s ease;
+  }
+
+  .burger-btn.open {
+    left: calc(min(84vw, 320px) - 48px);
   }
 
   .sidebar-overlay {
@@ -1442,25 +1340,172 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   }
 
   .main {
-    padding: 20px 16px;
+    min-height: 100dvh;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: calc(max(14px, env(safe-area-inset-top)) + 44px) 14px max(18px, env(safe-area-inset-bottom));
+  }
+
+  .logo-wrapper {
+    text-align: center;
+    max-width: 360px;
+  }
+
+  .logo {
+    font-size: clamp(30px, 11vw, 42px);
+    margin-bottom: 8px;
+  }
+
+  .tagline {
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    line-height: 1.45;
   }
 
   .input-wrapper {
     max-width: 100%;
   }
 
+  .url-input,
+  .modal-input {
+    font-size: 16px;
+  }
+
+  .url-input {
+    padding: 16px 58px 16px 16px;
+    border-radius: 14px;
+  }
+
+  .shrink-btn {
+    width: 40px;
+    height: 40px;
+    right: 8px;
+  }
+
   .link-detail {
     max-width: 100%;
+    padding: 16px;
+  }
+
+  .detail-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .detail-actions button {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .detail-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .detail-stats {
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  .stat {
+    min-width: 92px;
+  }
+
+  .modal-overlay {
+    align-items: flex-end;
+    padding: 0;
   }
 
   .modal {
-    max-width: 95vw;
-    padding: 24px 20px;
+    width: 100%;
+    max-width: none;
+    max-height: 88dvh;
+    border-radius: 20px 20px 0 0;
+    padding: 22px 18px;
+    overflow-y: auto;
   }
 
   .modal-row {
     flex-direction: column;
     gap: 12px;
+  }
+
+  .modal-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .btn-cancel,
+  .btn-create {
+    width: 100%;
+  }
+
+  .analytics-modal {
+    max-height: 88dvh;
+  }
+
+  .analytics-header {
+    padding: 18px 18px 14px;
+  }
+
+  .analytics-stats {
+    flex-direction: column;
+  }
+
+  .analytics-stat {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: 14px 18px;
+  }
+
+  .analytics-stat:last-child {
+    border-bottom: none;
+  }
+
+  .analytics-clicks-header {
+    padding: 12px 18px;
+  }
+
+  .analytics-visuals {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .analytics-chart {
+    height: 160px;
+  }
+
+  .analytics-clicks-list {
+    padding: 0 12px 12px;
+  }
+
+  .analytics-click-item {
+    align-items: flex-start;
+    gap: 6px;
+    padding: 10px;
+  }
+
+  .click-time {
+    padding-left: 24px;
+  }
+
+  .auth-overlay {
+    align-items: flex-start;
+    padding: max(16px, env(safe-area-inset-top)) 12px 16px;
+    overflow-y: auto;
+  }
+
+  .auth-box {
+    margin-top: 24px;
+    max-width: none;
+    padding: 24px 18px;
   }
 }
 
